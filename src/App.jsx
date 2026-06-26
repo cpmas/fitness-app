@@ -6,7 +6,7 @@ import {
 import { 
   Activity, Scale, TrendingDown, Target, ChevronLeft, ChevronRight, 
   Calendar, Flame, Zap, BarChart2, Info, CheckCircle2, AlertTriangle, ChevronUp, Calculator,
-  Home, Edit3, LineChart as ChartIcon, Settings, LogOut, User, Lock, Mail
+  Home, Edit3, LineChart as ChartIcon, Settings, LogOut, User, Lock, Mail, Loader2
 } from 'lucide-react';
 
 // Firebase Imports
@@ -138,6 +138,7 @@ export default function App() {
     weight: '', bodyFat: '', caloriesIn: '', caloriesOut: '', steps: ''
   });
   const [saveStatus, setSaveStatus] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Deficit Analysis State
   const [deficitTimeframe, setDeficitTimeframe] = useState(30);
@@ -243,6 +244,7 @@ export default function App() {
     const totalCaloriesEaten = avgIn * days;
     const fatCaloriesBurned = actualLoss * 7700;
     const trueTDEE = avgIn > 0 ? (totalCaloriesEaten + fatCaloriesBurned) / days : 0;
+    const avgLoggedDeficit = avgOutTracker - avgIn;
 
     return {
       days,
@@ -252,7 +254,8 @@ export default function App() {
       expectedLossTracker: expectedLossTracker.toFixed(2),
       trueTDEE: trueTDEE.toFixed(0),
       trackerDiscrepancy: (trueTDEE - avgOutTracker).toFixed(0), 
-      avgDeficit: (trueTDEE - avgIn).toFixed(0)
+      avgDeficit: (trueTDEE - avgIn).toFixed(0),
+      avgLoggedDeficit: avgLoggedDeficit.toFixed(0)
     };
   };
 
@@ -338,6 +341,7 @@ export default function App() {
 
   const handleSave = async () => {
     if (!user) return;
+    setIsSaving(true);
     const newEntry = {
       date: currentDateStr,
       weight: formData.weight ? parseFloat(formData.weight) : null,
@@ -356,6 +360,8 @@ export default function App() {
     } catch (err) {
       console.error("Save error:", err);
       setSaveStatus('Error saving');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -471,9 +477,11 @@ export default function App() {
               <div className="mt-6 flex flex-col gap-3">
                 <button 
                   onClick={handleSave}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2 active:scale-[0.98]"
+                  disabled={isSaving}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2 active:scale-[0.98] disabled:opacity-70"
                 >
-                  <CheckCircle2 className="w-5 h-5" /> Save Day to Cloud
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />} 
+                  {isSaving ? 'Saving...' : 'Save Day to Cloud'}
                 </button>
                 {saveStatus && <span className="text-sm text-emerald-400 font-medium text-center animate-pulse">{saveStatus}</span>}
               </div>
@@ -490,15 +498,15 @@ export default function App() {
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 gap-3">
                   <MetricCard 
-                    title="7-Day Avg Weight" 
-                    value={`${insights7?.actualLoss > 0 ? '-' : ''}${Math.abs(insights7?.actualLoss || 0).toFixed(1)} kg`}
+                    title="7-Day Weight Change" 
+                    value={`${insights7?.actualLoss > 0 ? '-' : '+'}${Math.abs(insights7?.actualLoss || 0).toFixed(1)} kg`}
                     subtext={`Avg: ${processedData[processedData.length-1]?.weightMA || 0} kg`}
                     icon={Scale} colorClass="text-emerald-400"
                   />
                   <MetricCard 
-                    title="Avg Deficit (30d)" 
-                    value={`${insights30?.avgDeficit || 0} kcal`}
-                    subtext="Via True TDEE"
+                    title="Avg Logged Deficit" 
+                    value={`${insights30?.avgLoggedDeficit || 0} kcal`}
+                    subtext="Based on user logs (30d)"
                     icon={Target} colorClass="text-orange-400"
                   />
                   <MetricCard 
@@ -522,18 +530,24 @@ export default function App() {
                       <Scale className="w-4 h-4 text-emerald-500" /> Composition Shift
                     </h2>
                   </div>
-                  <div className="h-56 -ml-4">
+                  <div className="h-56 -ml-2 mr-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={processedData} margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
+                      <LineChart data={processedData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                         <XAxis dataKey="displayDate" stroke="#94a3b8" fontSize={10} minTickGap={30} />
-                        <YAxis yAxisId="left" stroke="#3b82f6" fontSize={10} orientation="left" domain={['auto', 'auto']} width={40} />
-                        <YAxis yAxisId="right" stroke="#10b981" fontSize={10} orientation="right" domain={['auto', 'auto']} width={40}/>
+                        <YAxis yAxisId="left" stroke="#3b82f6" fontSize={10} orientation="left" domain={['auto', 'auto']} width={40} tickMargin={2} />
+                        <YAxis yAxisId="right" stroke="#10b981" fontSize={10} orientation="right" domain={['auto', 'auto']} width={40} tickMargin={2} />
                         <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }} />
+                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
                         <Line yAxisId="left" type="monotone" dataKey="weight" name="Daily Wt (kg)" stroke="#3b82f6" strokeWidth={1.5} dot={{r:1}} connectNulls opacity={0.5}/>
                         <Line yAxisId="right" type="monotone" dataKey="bodyFat" name="Body Fat %" stroke="#10b981" strokeWidth={2.5} dot={false} connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
+                  </div>
+                  <div className="mt-4 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      <strong className="text-emerald-400">What this shows:</strong> Watch for the <span className="text-emerald-400 font-medium">Body Fat %</span> line to trend downwards even if your <span className="text-blue-400 font-medium">Daily Weight</span> fluctuates. A dropping body fat percentage while weight stays stable indicates successful recomposition (building muscle while losing fat).
+                    </p>
                   </div>
                 </div>
 
@@ -544,17 +558,23 @@ export default function App() {
                       <Flame className="w-4 h-4 text-orange-500" /> Intake vs. Burn Trend
                     </h2>
                   </div>
-                  <div className="h-56 -ml-2">
+                  <div className="h-56 -ml-2 mr-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={processedData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                      <LineChart data={processedData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                         <XAxis dataKey="displayDate" stroke="#94a3b8" fontSize={10} minTickGap={30} />
-                        <YAxis stroke="#94a3b8" fontSize={10} domain={['auto', 'auto']} width={40} />
+                        <YAxis stroke="#94a3b8" fontSize={10} domain={['auto', 'auto']} width={40} tickMargin={2} />
                         <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }} />
+                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
                         <Line type="monotone" dataKey="caloriesOut" name="Burned (TDEE)" stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls />
                         <Line type="monotone" dataKey="caloriesIn" name="Eaten (Intake)" stroke="#f97316" strokeWidth={2.5} dot={false} connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
+                  </div>
+                  <div className="mt-4 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      <strong className="text-orange-400">What this shows:</strong> Keep your solid <span className="text-orange-400 font-medium">Intake</span> line consistently below your dashed <span className="text-emerald-400 font-medium">Burned</span> line to maintain a calorie deficit. The size of the gap represents your rate of expected weight loss.
+                    </p>
                   </div>
                 </div>
               </>
@@ -716,7 +736,7 @@ export default function App() {
         <div className="flex justify-around items-center h-14 max-w-lg mx-auto">
           {[
             { id: 'dashboard', icon: ChartIcon, label: 'Dash' },
-            { id: 'deficit', icon: Calculator, label: 'Math' },
+            { id: 'deficit', icon: Calculator, label: 'Deficit' },
             { id: 'entry', icon: Edit3, label: 'Log' },
             { id: 'insights', icon: Info, label: 'Insights' }
           ].map((tab) => (
