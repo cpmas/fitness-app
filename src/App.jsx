@@ -266,12 +266,17 @@ export default function App() {
 
     let startWeight = recentData[0].weightMA || recentData[0].weight || 0;
     let cumulativeNet = 0;
+    let previousCumulativeNet = 0;
 
     const chartData = recentData.map(day => {
+      // 1-Day Lag: Expected weight for today's morning weigh-in is based on accumulated net from previous days
+      const expectedWeight = startWeight + (previousCumulativeNet / 7700);
+
       if (day.caloriesIn && day.caloriesOut) {
         cumulativeNet += day.netCalories;
       }
-      const expectedWeight = startWeight + (cumulativeNet / 7700);
+      previousCumulativeNet = cumulativeNet;
+
       return {
         ...day,
         cumulativeNet,
@@ -582,17 +587,23 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Math: Expected</div>
-                    <div className="text-xl font-bold text-indigo-400">
-                      {cumulativeAnalysis.summary.expectedLoss > 0 ? '-' : '+'}{Math.abs(cumulativeAnalysis.summary.expectedLoss)} kg
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg flex flex-col justify-center">
+                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Accumulated Net</div>
+                    <div className="text-lg font-bold text-emerald-400 leading-none">
+                      {cumulativeAnalysis.summary.cumulativeNet > 0 ? '+' : ''}{cumulativeAnalysis.summary.cumulativeNet.toLocaleString()} <span className="text-xs font-normal text-slate-500">cal</span>
                     </div>
                   </div>
-                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Scale: Actual</div>
-                    <div className="text-xl font-bold text-blue-400">
-                      {cumulativeAnalysis.summary.actualLoss > 0 ? '-' : '+'}{Math.abs(cumulativeAnalysis.summary.actualLoss)} kg
+                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg flex flex-col justify-center">
+                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Math Expected</div>
+                    <div className="text-lg font-bold text-indigo-400 leading-none">
+                      {cumulativeAnalysis.summary.expectedLoss > 0 ? '-' : '+'}{Math.abs(cumulativeAnalysis.summary.expectedLoss).toFixed(2)} <span className="text-xs font-normal text-slate-500">kg</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-lg flex flex-col justify-center">
+                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Scale Actual</div>
+                    <div className="text-lg font-bold text-blue-400 leading-none">
+                      {cumulativeAnalysis.summary.actualLoss > 0 ? '-' : '+'}{Math.abs(cumulativeAnalysis.summary.actualLoss).toFixed(2)} <span className="text-xs font-normal text-slate-500">kg</span>
                     </div>
                   </div>
                 </div>
@@ -605,20 +616,33 @@ export default function App() {
                       <span className="text-blue-400"> Blue line</span> is actual smoothed weight.
                     </p>
                   </div>
-                  <div className="h-72 -ml-4">
+                  <div className="h-72 -ml-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={cumulativeAnalysis.chartData} margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
+                      <ComposedChart data={cumulativeAnalysis.chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                         <XAxis dataKey="displayDate" stroke="#94a3b8" fontSize={10} tickMargin={5} minTickGap={30} />
-                        <YAxis yAxisId="weight" stroke="#94a3b8" fontSize={10} orientation="left" domain={['auto', 'auto']} width={35} />
-                        <YAxis yAxisId="deficit" stroke="#10b981" fontSize={10} orientation="right" domain={['auto', 'auto']} tickFormatter={(val) => `${val/1000}k`} width={35} />
+                        <YAxis yAxisId="weight" stroke="#94a3b8" fontSize={10} orientation="left" domain={['auto', 'auto']} width={40} tickMargin={2} />
+                        <YAxis yAxisId="deficit" stroke="#10b981" fontSize={10} orientation="right" domain={['auto', 'auto']} tickFormatter={(val) => `${val/1000}k`} width={40} tickMargin={2} />
                         <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '12px' }} />
                         <Line yAxisId="weight" type="monotone" dataKey="expectedWeight" name="Expected" stroke="#818cf8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                         <Line yAxisId="weight" type="monotone" dataKey="actualWeightMA" name="Actual" stroke="#3b82f6" strokeWidth={2.5} dot={false} connectNulls />
-                        <Bar yAxisId="deficit" dataKey="cumulativeNet" name="Net Cals" fill="#10b981" opacity={0.15} radius={[0, 0, 2, 2]} />
+                        <Bar yAxisId="deficit" dataKey="cumulativeNet" name="Accumulated Cals" fill="#10b981" opacity={0.15} radius={[0, 0, 2, 2]} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
+                </div>
+
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 shadow-lg">
+                  <h3 className="text-sm font-bold text-slate-200 mb-2 flex items-center gap-2">
+                     <Info className="w-4 h-4 text-blue-400" /> How to read this chart
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed mb-3">
+                    There is a 1-day lag between eating and the scale. The <strong className="text-indigo-400">expected line</strong> for today's weight is mathematically calculated using your accumulated calories up until <i>yesterday</i>. 
+                  </p>
+                  <ul className="text-xs text-slate-400 space-y-2 list-disc pl-4 marker:text-slate-500">
+                    <li>If the <span className="text-blue-400 font-medium">actual line</span> is <strong>above</strong> the expected line, you are likely retaining water or accidentally eating more than you logged.</li>
+                    <li>If it drops <strong>below</strong> the expected line, you might be shedding water weight or burning more energy than your tracker thinks!</li>
+                  </ul>
                 </div>
               </>
             )}
