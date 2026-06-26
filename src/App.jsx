@@ -232,8 +232,11 @@ export default function App() {
     const avgIn = validIn.length ? validIn.reduce((sum, d) => sum + d.caloriesIn, 0) / validIn.length : 0;
     const avgOutTracker = validOut.length ? validOut.reduce((sum, d) => sum + d.caloriesOut, 0) / validOut.length : 0;
     
-    const startWeight = recent[0].weightMA || recent[0].weight || 0;
-    const endWeight = recent[recent.length - 1].weightMA || recent[recent.length - 1].weight || 0;
+    // Find the first and last actual valid weights in the timeframe
+    const validWeights = recent.filter(d => d.weight);
+    const startWeight = validWeights.length > 0 ? validWeights[0].weight : 0;
+    const endWeight = validWeights.length > 0 ? validWeights[validWeights.length - 1].weight : 0;
+    
     const actualLoss = startWeight - endWeight;
     
     // Expected Loss from Tracker (7700 cals = 1 kg)
@@ -267,7 +270,11 @@ export default function App() {
     const recentData = processedData.slice(-deficitTimeframe);
     if (recentData.length === 0) return { chartData: [], summary: null };
 
-    let startWeight = recentData[0].weightMA || recentData[0].weight || 0;
+    // Find the actual start and end weights for the given timeframe
+    const validWeights = recentData.filter(d => d.weight);
+    const startWeight = validWeights.length > 0 ? validWeights[0].weight : 0;
+    const endWeight = validWeights.length > 0 ? validWeights[validWeights.length - 1].weight : 0;
+
     let cumulativeNet = 0;
     let previousCumulativeNet = 0;
 
@@ -284,11 +291,10 @@ export default function App() {
         ...day,
         cumulativeNet,
         expectedWeight: parseFloat(expectedWeight.toFixed(2)),
-        actualWeightMA: day.weightMA || 0
+        actualWeight: day.weight || null
       };
     });
 
-    const endWeight = recentData[recentData.length - 1].weightMA || recentData[recentData.length - 1].weight || 0;
     const actualLoss = startWeight - endWeight;
     const expectedLoss = (cumulativeNet * -1) / 7700;
     const diff = expectedLoss - actualLoss;
@@ -631,7 +637,7 @@ export default function App() {
                     <h3 className="text-base font-bold text-white mb-1">Math vs Reality Trend</h3>
                     <p className="text-[10px] text-slate-400 leading-tight">
                       <span className="text-indigo-400">Purple line</span> is expected weight (7700cal/kg). 
-                      <span className="text-blue-400"> Blue line</span> is actual smoothed weight.
+                      <span className="text-blue-400"> Blue line</span> is actual weight.
                     </p>
                   </div>
                   <div className="h-72 -ml-2">
@@ -643,7 +649,7 @@ export default function App() {
                         <YAxis yAxisId="deficit" stroke="#10b981" fontSize={10} orientation="right" domain={['auto', 'auto']} tickFormatter={(val) => `${val/1000}k`} width={40} tickMargin={2} />
                         <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '12px' }} />
                         <Line yAxisId="weight" type="monotone" dataKey="expectedWeight" name="Expected" stroke="#818cf8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                        <Line yAxisId="weight" type="monotone" dataKey="actualWeightMA" name="Actual" stroke="#3b82f6" strokeWidth={2.5} dot={false} connectNulls />
+                        <Line yAxisId="weight" type="monotone" dataKey="actualWeight" name="Actual" stroke="#3b82f6" strokeWidth={2.5} dot={false} connectNulls />
                         <Bar yAxisId="deficit" dataKey="cumulativeNet" name="Accumulated Cals" fill="#10b981" opacity={0.15} radius={[0, 0, 2, 2]} />
                       </ComposedChart>
                     </ResponsiveContainer>
