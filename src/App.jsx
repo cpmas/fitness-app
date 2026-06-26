@@ -515,30 +515,7 @@ export default function App() {
                   />
                 </div>
 
-                {/* GRAPH A: Energy Balance */}
-                <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl">
-                  <div className="mb-4">
-                    <h2 className="text-base font-bold text-white flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-orange-500" /> Deficit vs. Reality
-                    </h2>
-                  </div>
-                  <div className="h-64 -ml-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={processedData} margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                        <XAxis dataKey="displayDate" stroke="#94a3b8" fontSize={10} tickMargin={5} minTickGap={30} />
-                        <YAxis yAxisId="left" stroke="#f97316" fontSize={10} orientation="left" domain={['auto', 'auto']} width={40} />
-                        <YAxis yAxisId="right" stroke="#3b82f6" fontSize={10} orientation="right" domain={['auto', 'auto']} width={40} />
-                        <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '12px' }} itemStyle={{ color: '#f8fafc' }} />
-                        <ReferenceLine y={0} yAxisId="left" stroke="#64748b" strokeDasharray="3 3" />
-                        <Bar yAxisId="left" dataKey="netCalories" name="Net Calories" fill="#f97316" radius={[2, 2, 0, 0]} opacity={0.8} />
-                        <Line yAxisId="right" type="monotone" dataKey="weightMA" name="Weight (Avg)" stroke="#3b82f6" strokeWidth={3} dot={false} connectNulls />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* GRAPH B: Composition Shift */}
+                {/* GRAPH A: Composition Shift (Hero Graph) */}
                 <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl">
                   <div className="mb-4">
                     <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -555,6 +532,27 @@ export default function App() {
                         <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }} />
                         <Line yAxisId="left" type="monotone" dataKey="weight" name="Daily Wt (kg)" stroke="#3b82f6" strokeWidth={1.5} dot={{r:1}} connectNulls opacity={0.5}/>
                         <Line yAxisId="right" type="monotone" dataKey="bodyFat" name="Body Fat %" stroke="#10b981" strokeWidth={2.5} dot={false} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* GRAPH B: Intake vs. Burn Trend */}
+                <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl">
+                  <div className="mb-4">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-orange-500" /> Intake vs. Burn Trend
+                    </h2>
+                  </div>
+                  <div className="h-56 -ml-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={processedData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                        <XAxis dataKey="displayDate" stroke="#94a3b8" fontSize={10} minTickGap={30} />
+                        <YAxis stroke="#94a3b8" fontSize={10} domain={['auto', 'auto']} width={40} />
+                        <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }} />
+                        <Line type="monotone" dataKey="caloriesOut" name="Burned (TDEE)" stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls />
+                        <Line type="monotone" dataKey="caloriesIn" name="Eaten (Intake)" stroke="#f97316" strokeWidth={2.5} dot={false} connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -634,14 +632,14 @@ export default function App() {
 
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 shadow-lg">
                   <h3 className="text-sm font-bold text-slate-200 mb-2 flex items-center gap-2">
-                     <Info className="w-4 h-4 text-blue-400" /> How to read this chart
+                     <Info className="w-4 h-4 text-blue-400" /> Math vs Reality
                   </h3>
                   <p className="text-xs text-slate-300 leading-relaxed mb-3">
-                    There is a 1-day lag between eating and the scale. The <strong className="text-indigo-400">expected line</strong> for today's weight is mathematically calculated using your accumulated calories up until <i>yesterday</i>. 
+                    The <strong className="text-indigo-400">Expected line</strong> projects your weight purely based on the calorie deficit you have logged (7,700 cals = 1kg).
                   </p>
                   <ul className="text-xs text-slate-400 space-y-2 list-disc pl-4 marker:text-slate-500">
-                    <li>If the <span className="text-blue-400 font-medium">actual line</span> is <strong>above</strong> the expected line, you are likely retaining water or accidentally eating more than you logged.</li>
-                    <li>If it drops <strong>below</strong> the expected line, you might be shedding water weight or burning more energy than your tracker thinks!</li>
+                    <li>If your <span className="text-blue-400 font-medium">Actual line</span> is consistently <strong>above</strong> the expected line, you may be eating more than you are tracking, or your tracker is overestimating your burn.</li>
+                    <li>If it sits <strong>below</strong> the expected line, you might be burning more energy than your tracker realizes!</li>
                   </ul>
                 </div>
               </>
