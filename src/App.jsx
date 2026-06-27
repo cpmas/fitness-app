@@ -140,6 +140,10 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   
+  // Settings & Goal State
+  const [goalWeight, setGoalWeight] = useState('');
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
+
   // Deficit Analysis State
   const [deficitTimeframe, setDeficitTimeframe] = useState(30);
 
@@ -166,8 +170,18 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setEntries([]);
+      setGoalWeight('');
       return;
     }
+
+    // Listen to user's profile for settings (e.g. Goal Weight)
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid);
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists() && docSnap.data().goalWeight) {
+        setGoalWeight(docSnap.data().goalWeight.toString());
+      }
+    });
+
     // Listen to user's private data collection
     const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'entries'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -179,7 +193,11 @@ export default function App() {
     }, (error) => {
       console.error("Firestore error:", error);
     });
-    return () => unsubscribe();
+    
+    return () => {
+      unsubProfile();
+      unsubscribe();
+    };
   }, [user]);
 
   const processedData = useMemo(() => {
@@ -313,6 +331,72 @@ export default function App() {
     };
   }, [processedData, deficitTimeframe]);
 
+  const goalProgress = useMemo(() => {
+    if (!goalWeight || processedData.length === 0) return null;
+    
+    const validWeights = processedData.filter(d => d.weight);
+    if (validWeights.length === 0) return null;
+
+    const startWeight = validWeights[0].weight;
+    const currentWeight = validWeights[validWeights.length - 1].weight;
+    const target = parseFloat(goalWeight);
+
+    // Assume weight loss logic, invert if it's a gain goal
+    const totalToLose = startWeight - target;
+    const remaining = currentWeight - target;
+    let percent = 0;
+    let etaText = "Need more data";
+
+    if (totalToLose > 0) {
+      // Weight loss
+      if (currentWeight <= target) {
+        percent = 100;
+        etaText = "Goal Reached! 🎉";
+      } else {
+        const currentLost = startWeight - currentWeight;
+        percent = (currentLost / totalToLose) * 100;
+        
+        if (insights30 && insights30.avgDeficit > 0) {
+          const dailyLossKg = insights30.avgDeficit / 7700;
+          const days = remaining / dailyLossKg;
+          if (days < 7) etaText = `${Math.ceil(days)} days`;
+          else etaText = `${Math.ceil(days / 7)} weeks`;
+        } else {
+          etaText = "No deficit";
+        }
+      }
+    } else if (totalToLose < 0) {
+      // Weight gain
+      if (currentWeight >= target) {
+        percent = 100;
+        etaText = "Goal Reached! 🎉";
+      } else {
+        const totalToGain = target - startWeight;
+        const currentGained = currentWeight - startWeight;
+        percent = (currentGained / totalToGain) * 100;
+        
+        if (insights30 && insights30.avgDeficit < 0) {
+          const dailyGainKg = Math.abs(insights30.avgDeficit) / 7700;
+          const days = Math.abs(remaining) / dailyGainKg;
+          if (days < 7) etaText = `${Math.ceil(days)} days`;
+          else etaText = `${Math.ceil(days / 7)} weeks`;
+        } else {
+          etaText = "No surplus";
+        }
+      }
+    } else {
+      percent = 100;
+      etaText = "Goal Reached! 🎉";
+    }
+
+    return {
+      percent: Math.max(0, Math.min(100, percent)).toFixed(1),
+      remaining: Math.abs(remaining).toFixed(1),
+      etaText,
+      isGain: totalToLose < 0
+    };
+  }, [goalWeight, processedData, insights30]);
+
   useEffect(() => {
     const existing = entries.find(e => e.date === currentDateStr);
     if (existing) {
@@ -368,6 +452,21 @@ export default function App() {
       setSaveStatus('Error saving');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveGoal = async () => {
+    if (!user) return;
+    setIsSavingGoal(true);
+    try {
+      const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
+      await setDoc(userRef, {
+        goalWeight: goalWeight ? parseFloat(goalWeight) : null
+      }, { merge: true });
+    } catch (err) {
+      console.error("Save goal error:", err);
+    } finally {
+      setIsSavingGoal(false);
     }
   };
 
@@ -501,6 +600,29 @@ export default function App() {
           <div className="space-y-4 animate-in fade-in duration-300">
             {entries.length === 0 ? <EmptyState /> : (
               <>
+                {/* Goal Progress Bar */}
+                {goalProgress && (
+                  <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-xl">
+                    <div className="flex justify-between items-end mb-2">
+                      <div>
+                        <h3 className="text-slate-400 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+                          <Target className="w-3 h-3 text-blue-400" /> Goal Progress
+                        </h3>
+                        <div className="text-xl font-bold text-white mt-1">
+                          {goalProgress.remaining} kg <span className="text-sm font-normal text-slate-400">{goalProgress.isGain ? 'to gain' : 'to go'}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-emerald-400">{goalProgress.percent}%</div>
+                        <div className="text-[10px] text-slate-500">ETA: {goalProgress.etaText}</div>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-900 rounded-full h-2.5 mb-1 overflow-hidden border border-slate-700">
+                      <div className="bg-gradient-to-r from-blue-500 to-emerald-400 h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${goalProgress.percent}%` }}></div>
+                    </div>
+                  </div>
+                )}
+
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 gap-3">
                   <MetricCard 
@@ -718,6 +840,29 @@ export default function App() {
                 <h2 className="text-lg font-bold text-white">{user.isAnonymous ? 'Guest User' : user.email}</h2>
                 <p className="text-xs text-slate-500 font-mono mt-1 break-all px-4 text-center">ID: {user.uid}</p>
               </div>
+
+              {/* Goal Weight Setting */}
+              <div className="p-4 border-b border-slate-700/50 bg-slate-800">
+                <label className="text-xs text-slate-400 font-semibold mb-2 block uppercase tracking-wider">Goal Weight (kg)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    value={goalWeight} 
+                    onChange={(e) => setGoalWeight(e.target.value)} 
+                    className="flex-1 bg-slate-900/50 text-white font-bold px-4 py-2 rounded-xl border border-slate-700/50 outline-none focus:border-blue-500 transition-colors"
+                    placeholder="e.g. 75.0"
+                  />
+                  <button 
+                    onClick={handleSaveGoal}
+                    disabled={isSavingGoal}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                  >
+                    {isSavingGoal ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+
               <div className="p-4">
                 <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl mb-4 border border-slate-700/50">
                   <span className="text-sm text-slate-300 font-medium">Total Entries</span>
