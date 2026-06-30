@@ -79,7 +79,7 @@ const AuthScreen = ({ onLogin }) => {
           <div className="bg-blue-500 p-3 rounded-2xl mb-4 shadow-lg shadow-blue-500/20">
             <Activity className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Fitness Correlator</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Intake</h1>
           <p className="text-slate-400 text-sm mt-1">Data-driven body recomposition</p>
         </div>
 
@@ -130,7 +130,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [entries, setEntries] = useState([]);
-  const [activeTab, setActiveTab] = useState('entry'); // Default to entry for new users
+  const [activeTab, setActiveTab] = useState('entry'); 
   
   // Data Entry State
   const [currentDateStr, setCurrentDateStr] = useState(new Date().toISOString().split('T')[0]);
@@ -142,6 +142,7 @@ export default function App() {
   
   // Settings & Goal State
   const [goalWeight, setGoalWeight] = useState('');
+  const [startWeight, setStartWeight] = useState('');
   const [isSavingGoal, setIsSavingGoal] = useState(false);
 
   // Deficit Analysis State
@@ -171,14 +172,17 @@ export default function App() {
     if (!user) {
       setEntries([]);
       setGoalWeight('');
+      setStartWeight('');
       return;
     }
 
-    // Listen to user's profile for settings (e.g. Goal Weight)
+    // Listen to user's profile for settings (Goal & Start Weight)
     const profileRef = doc(db, 'artifacts', appId, 'users', user.uid);
     const unsubProfile = onSnapshot(profileRef, (docSnap) => {
-      if (docSnap.exists() && docSnap.data().goalWeight) {
-        setGoalWeight(docSnap.data().goalWeight.toString());
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.goalWeight) setGoalWeight(data.goalWeight.toString());
+        if (data.startWeight) setStartWeight(data.startWeight.toString());
       }
     });
 
@@ -252,10 +256,10 @@ export default function App() {
     
     // Find the first and last actual valid weights in the timeframe
     const validWeights = recent.filter(d => d.weight);
-    const startWeight = validWeights.length > 0 ? validWeights[0].weight : 0;
-    const endWeight = validWeights.length > 0 ? validWeights[validWeights.length - 1].weight : 0;
+    const startPeriodWeight = validWeights.length > 0 ? validWeights[0].weight : 0;
+    const endPeriodWeight = validWeights.length > 0 ? validWeights[validWeights.length - 1].weight : 0;
     
-    const actualLoss = startWeight - endWeight;
+    const actualLoss = startPeriodWeight - endPeriodWeight;
     
     // Expected Loss from Tracker (7700 cals = 1 kg)
     const totalTrackerDeficit = recent.reduce((sum, d) => sum + (d.netCalories || 0), 0);
@@ -290,15 +294,15 @@ export default function App() {
 
     // Find the actual start and end weights for the given timeframe
     const validWeights = recentData.filter(d => d.weight);
-    const startWeight = validWeights.length > 0 ? validWeights[0].weight : 0;
-    const endWeight = validWeights.length > 0 ? validWeights[validWeights.length - 1].weight : 0;
+    const startPeriodWeight = validWeights.length > 0 ? validWeights[0].weight : 0;
+    const endPeriodWeight = validWeights.length > 0 ? validWeights[validWeights.length - 1].weight : 0;
 
     let cumulativeNet = 0;
     let previousCumulativeNet = 0;
 
     const chartData = recentData.map(day => {
       // 1-Day Lag: Expected weight for today's morning weigh-in is based on accumulated net from previous days
-      const expectedWeight = startWeight + (previousCumulativeNet / 7700);
+      const expectedWeight = startPeriodWeight + (previousCumulativeNet / 7700);
 
       if (day.caloriesIn && day.caloriesOut) {
         cumulativeNet += day.netCalories;
@@ -313,15 +317,15 @@ export default function App() {
       };
     });
 
-    const actualLoss = startWeight - endWeight;
+    const actualLoss = startPeriodWeight - endPeriodWeight;
     const expectedLoss = (cumulativeNet * -1) / 7700;
     const diff = expectedLoss - actualLoss;
 
     return {
       chartData,
       summary: {
-        startWeight: startWeight.toFixed(1),
-        endWeight: endWeight.toFixed(1),
+        startWeight: startPeriodWeight.toFixed(1),
+        endWeight: endPeriodWeight.toFixed(1),
         cumulativeNet,
         actualLoss: actualLoss.toFixed(2),
         expectedLoss: expectedLoss.toFixed(2),
@@ -337,11 +341,11 @@ export default function App() {
     const validWeights = processedData.filter(d => d.weight);
     if (validWeights.length === 0) return null;
 
-    const startWeight = validWeights[0].weight;
+    const baseWeight = startWeight ? parseFloat(startWeight) : validWeights[0].weight;
     const currentWeight = validWeights[validWeights.length - 1].weight;
     const target = parseFloat(goalWeight);
 
-    const totalToLose = startWeight - target;
+    const totalToLose = baseWeight - target;
     const remaining = currentWeight - target;
     let percent = 0;
     let etaText = "Need more data";
@@ -352,7 +356,7 @@ export default function App() {
 
     if (totalToLose > 0) {
       // Weight loss
-      const currentLost = startWeight - currentWeight;
+      const currentLost = baseWeight - currentWeight;
       completedText = `${Math.max(0, currentLost).toFixed(1)} kg lost`;
 
       if (currentWeight <= target) {
@@ -372,8 +376,8 @@ export default function App() {
       }
     } else if (totalToLose < 0) {
       // Weight gain
-      const totalToGain = target - startWeight;
-      const currentGained = currentWeight - startWeight;
+      const totalToGain = target - baseWeight;
+      const currentGained = currentWeight - baseWeight;
       completedText = `${Math.max(0, currentGained).toFixed(1)} kg gained`;
 
       if (currentWeight >= target) {
@@ -405,7 +409,7 @@ export default function App() {
       completedText,
       target
     };
-  }, [goalWeight, processedData, insights30]);
+  }, [goalWeight, startWeight, processedData, insights30]);
 
   useEffect(() => {
     const existing = entries.find(e => e.date === currentDateStr);
@@ -471,7 +475,8 @@ export default function App() {
     try {
       const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
       await setDoc(userRef, {
-        goalWeight: goalWeight ? parseFloat(goalWeight) : null
+        goalWeight: goalWeight ? parseFloat(goalWeight) : null,
+        startWeight: startWeight ? parseFloat(startWeight) : null
       }, { merge: true });
     } catch (err) {
       console.error("Save goal error:", err);
@@ -523,7 +528,7 @@ export default function App() {
             <div className="bg-blue-500 p-1.5 rounded-lg">
               <Activity className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-bold text-white tracking-tight">Fitness Correlator</h1>
+            <h1 className="text-lg font-bold text-white tracking-tight">Intake</h1>
           </div>
           <button onClick={() => setActiveTab('settings')} className="p-2 hover:bg-slate-800 rounded-full transition">
             <User className={`w-5 h-5 ${activeTab === 'settings' ? 'text-blue-400' : 'text-slate-400'}`} />
@@ -868,26 +873,40 @@ export default function App() {
                 <p className="text-xs text-slate-500 font-mono mt-1 break-all px-4 text-center">ID: {user.uid}</p>
               </div>
 
-              {/* Goal Weight Setting */}
-              <div className="p-4 border-b border-slate-700/50 bg-slate-800">
-                <label className="text-xs text-slate-400 font-semibold mb-2 block uppercase tracking-wider">Goal Weight (kg)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="number" 
-                    inputMode="decimal"
-                    value={goalWeight} 
-                    onChange={(e) => setGoalWeight(e.target.value)} 
-                    className="flex-1 bg-slate-900/50 text-white font-bold px-4 py-2 rounded-xl border border-slate-700/50 outline-none focus:border-blue-500 transition-colors"
-                    placeholder="e.g. 75.0"
-                  />
-                  <button 
-                    onClick={handleSaveGoal}
-                    disabled={isSavingGoal}
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
-                  >
-                    {isSavingGoal ? 'Saving...' : 'Save'}
-                  </button>
+              {/* Goal Settings */}
+              <div className="p-4 border-b border-slate-700/50 bg-slate-800 space-y-3">
+                <h3 className="text-sm font-bold text-white">Goal Settings</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-semibold mb-1 block uppercase tracking-wider">Start Weight</label>
+                    <input 
+                      type="number" 
+                      inputMode="decimal"
+                      value={startWeight} 
+                      onChange={(e) => setStartWeight(e.target.value)} 
+                      className="w-full bg-slate-900/50 text-white font-bold px-3 py-2 rounded-xl border border-slate-700/50 outline-none focus:border-blue-500 transition-colors"
+                      placeholder="e.g. 80.0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-semibold mb-1 block uppercase tracking-wider">Goal Weight</label>
+                    <input 
+                      type="number" 
+                      inputMode="decimal"
+                      value={goalWeight} 
+                      onChange={(e) => setGoalWeight(e.target.value)} 
+                      className="w-full bg-slate-900/50 text-white font-bold px-3 py-2 rounded-xl border border-slate-700/50 outline-none focus:border-blue-500 transition-colors"
+                      placeholder="e.g. 75.0"
+                    />
+                  </div>
                 </div>
+                <button 
+                  onClick={handleSaveGoal}
+                  disabled={isSavingGoal}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 mt-2"
+                >
+                  {isSavingGoal ? 'Saving...' : 'Save Goals'}
+                </button>
               </div>
 
               <div className="p-4">
